@@ -178,7 +178,13 @@ function handleLogin() {
     submitButton.textContent = "Submit";
     submitButton.type = "submit";
 
+    const cancelButton = document.createElement("button");
+    cancelButton.textContent = "Cancel";
+    cancelButton.type = "button";
+    cancelButton.addEventListener("click", closeModal);
+
     form.appendChild(submitButton);
+    form.appendChild(cancelButton);
     form.addEventListener("submit", handleLoginSubmit);
 
     modal.appendChild(form);
@@ -273,9 +279,9 @@ function handleSignup() {
 
     // Заполняем опции для выбора роли
     const roleOptions = [
-        { value: 1, text: "Role 1" },
-        { value: 2, text: "Role 2" },
-        { value: 3, text: "Role 3" }
+        { value: 1, text: "Role ADMIN" },
+        { value: 2, text: "Role MANAGER" },
+        { value: 3, text: "Role CUSTOMER" }
     ];
 
     roleOptions.forEach(option => {
@@ -513,7 +519,7 @@ function displayWarehouseTable(warehouses) {
 function displayProductsTable1(warehouse) {
     removePreviousTable();
 
-    // Создаем элемент для отображения названия склада
+    // Create an element to display the warehouse name
     const warehouseNameElement = document.createElement("h2");
     warehouseNameElement.textContent = `Warehouse: ${warehouse.name}`;
     document.body.appendChild(warehouseNameElement);
@@ -532,12 +538,13 @@ function displayProductsTable1(warehouse) {
         headerRow.appendChild(headerCell);
     });
 
-    warehouse.product.forEach(product => {
+    warehouse.stocks.forEach(stock => {
         const row = table.insertRow();
+        const product = stock.product;
         const name = product.name || "N/A";
         const price = product.price || "N/A";
         const minimumStock = product.minimumStock || "N/A";
-        const amount = product.Stock ? product.Stock.amount : "N/A";
+        const amount = stock.amount || "N/A";
 
         const rowData = [name, price, minimumStock, amount];
 
@@ -546,28 +553,31 @@ function displayProductsTable1(warehouse) {
             cell.textContent = value;
         });
 
-        // Создаем ячейку для кнопок
+        // Create a cell for buttons
         const actionCell = row.insertCell();
 
-        // Создаем кнопку "+" для добавления товара
+        // Create a button "+" to add more of the product
         const addButton = document.createElement("button");
         addButton.textContent = "+";
         addButton.classList.add("addBtn");
-        addButton.dataset.stockId = product.Stock.id;
-        addButton.addEventListener("click", () => addMoreProduct(product.Stock.id, warehouse.id));
+        addButton.dataset.stockId = stock.id;
+        addButton.addEventListener("click", () => addMoreProduct(stock.id, warehouse.id));
         actionCell.appendChild(addButton);
 
-        // Создаем кнопку "->" для перемещения товара
+        // Create a button "->" to move the product
         const moveButton = document.createElement("button");
         moveButton.textContent = "->";
         moveButton.classList.add("moveBtn");
-        moveButton.addEventListener("click", () => moveProduct(product.Stock.id, warehouse.id, product.id));
+        moveButton.addEventListener("click", () => moveProduct(stock.id, warehouse.id, product.id));
         actionCell.appendChild(moveButton);
     });
 
     tableContainer.appendChild(table);
     document.body.appendChild(tableContainer);
 }
+
+
+
 
 
 
@@ -607,20 +617,25 @@ function addMoreProduct(stockId, warehouse) {
             })
                 .then(response => {
                     if (!response.ok) {
-                        throw new Error("Failed to add product to stock");
+                        if (response.status === 403) {
+                            // Если получена ошибка 403, отображаем сообщение об ошибке
+                            showModal("You have no rights to this action");
+                        } else {
+                            throw new Error("Failed to add product to stock");
+                        }
+                    } else {
+                        // Успешно добавлено
+                        setTimeout(() => {
+                            fetchProductsDataFromAPI1(warehouse);
+                        }, 10);
+                        closeModal(); // Закрываем модальное окно
                     }
-                    // Успешно добавлено
-                    setTimeout(() => {
-                        fetchProductsDataFromAPI1(warehouse);
-                    }, 10);
-                    closeModal(); // Закрываем модальное окно
                 })
                 .catch(error => {
                     console.error("Error adding product to stock:", error);
                     closeModal(); // Закрываем модальное окно
                 });
         }
-
     });
 
     // Создаем кнопку "Cancel"
@@ -708,14 +723,20 @@ function moveProduct(stockId, warehouse, productId) {
                         })
                             .then(response => {
                                 if (!response.ok) {
-                                    throw new Error("Failed to transfer product stock");
+                                    if (response.status === 403) {
+                                        // Если получена ошибка 403, отображаем сообщение об ошибке
+                                        showModal("You have no rights to this action");
+                                    } else {
+                                        throw new Error("Failed to transfer product stock");
+                                    }
+                                } else {
+                                    // Успешно перемещено
+                                    setTimeout(() => {
+                                        fetchProductsDataFromAPI1(warehouse);
+                                    }, 10);
+                                    closeModal(); // Закрываем модальное окно
+                                    // Дополнительные действия, если нужно
                                 }
-                                setTimeout(() => {
-                                    fetchProductsDataFromAPI1(warehouse);
-                                }, 10);
-                                // Успешно перемещено
-                                closeModal(); // Закрываем модальное окно
-                                // Дополнительные действия, если нужно
                             })
                             .catch(error => {
                                 console.error("Error transferring product stock:", error);
@@ -1049,115 +1070,121 @@ function displayCustomersTable(customers) {
     document.body.appendChild(addButton);
 }
 
-function addNewCustomer() {
-    // Создаем модальное окно для ввода данных нового клиента
-    const modal = document.createElement("div");
-    modal.classList.add("modal");
-
-    const modalContent = document.createElement("div");
-    modalContent.classList.add("modal-content");
-
-    // Создаем поля ввода для фамилии, имени, отчества, телефона, email и адреса доставки клиента
-    const lastNameLabel = document.createElement("label");
-    lastNameLabel.textContent = "Last Name:";
-    const lastNameField = document.createElement("input");
-    lastNameField.type = "text";
-    lastNameField.required = true;
-
-    const firstNameLabel = document.createElement("label");
-    firstNameLabel.textContent = "First Name:";
-    const firstNameField = document.createElement("input");
-    firstNameField.type = "text";
-    firstNameField.required = true;
-
-    const patronymicLabel = document.createElement("label");
-    patronymicLabel.textContent = "Patronymic:";
-    const patronymicField = document.createElement("input");
-    patronymicField.type = "text";
-
-    const phoneLabel = document.createElement("label");
-    phoneLabel.textContent = "Phone:";
-    const phoneField = document.createElement("input");
-    phoneField.type = "text";
-    phoneField.required = true;
-
-    const emailLabel = document.createElement("label");
-    emailLabel.textContent = "Email:";
-    const emailField = document.createElement("input");
-    emailField.type = "email";
-    emailField.required = true;
-
-    const shippingAddressLabel = document.createElement("label");
-    shippingAddressLabel.textContent = "Shipping Address:";
-    const shippingAddressField = document.createElement("input");
-    shippingAddressField.type = "text";
-    shippingAddressField.required = true;
-
-    // Создаем кнопку "OK" для добавления нового клиента
-    const okButton = document.createElement("button");
-    okButton.textContent = "OK";
-    okButton.addEventListener("click", function() {
-        const lastName = lastNameField.value.trim();
-        const firstName = firstNameField.value.trim();
-        const patronymic = patronymicField.value.trim();
-        const phone = phoneField.value.trim();
-        const email = emailField.value.trim();
-        const shippingAddress = shippingAddressField.value.trim();
-
-        // Проверяем, что все обязательные поля заполнены
-        if (lastName && firstName && phone && email && shippingAddress) {
-            const data = { lastName, firstName, patronymic, phone, email, shippingAdress: shippingAddress };
-            const token = getCookie("token");
-            fetch("https://retail-n3ew.onrender.com/customer", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`
-                },
-                body: JSON.stringify(data)
-            })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error("Failed to add new customer");
-                    }
-                    // Успешно добавлено
-                    closeModal();
-                    fetchCustomersDataFromAPI(); // Обновляем таблицу клиентов
-                })
-                .catch(error => {
-                    console.error("Error adding new customer:", error);
-                    closeModal();
-                });
-        }
-    });
-
-    // Создаем кнопку "Cancel" для закрытия модального окна
-    const cancelButton = document.createElement("button");
-    cancelButton.textContent = "Cancel";
-    cancelButton.addEventListener("click", closeModal);
-
-    // Добавляем элементы в контент модального окна
-    modalContent.appendChild(lastNameLabel);
-    modalContent.appendChild(lastNameField);
-    modalContent.appendChild(firstNameLabel);
-    modalContent.appendChild(firstNameField);
-    modalContent.appendChild(patronymicLabel);
-    modalContent.appendChild(patronymicField);
-    modalContent.appendChild(phoneLabel);
-    modalContent.appendChild(phoneField);
-    modalContent.appendChild(emailLabel);
-    modalContent.appendChild(emailField);
-    modalContent.appendChild(shippingAddressLabel);
-    modalContent.appendChild(shippingAddressField);
-    modalContent.appendChild(okButton);
-    modalContent.appendChild(cancelButton);
-
-    // Добавляем контент модального окна в модальное окно
-    modal.appendChild(modalContent);
-
-    // Добавляем модальное окно в тело документа
-    document.body.appendChild(modal);
-}
+// function addNewCustomer() {
+//     // Создаем модальное окно для ввода данных нового клиента
+//     const modal = document.createElement("div");
+//     modal.classList.add("modal");
+//
+//     const modalContent = document.createElement("div");
+//     modalContent.classList.add("modal-content");
+//
+//     // Создаем поля ввода для фамилии, имени, отчества, телефона, email и адреса доставки клиента
+//     const lastNameLabel = document.createElement("label");
+//     lastNameLabel.textContent = "Last Name:";
+//     const lastNameField = document.createElement("input");
+//     lastNameField.type = "text";
+//     lastNameField.required = true;
+//
+//     const firstNameLabel = document.createElement("label");
+//     firstNameLabel.textContent = "First Name:";
+//     const firstNameField = document.createElement("input");
+//     firstNameField.type = "text";
+//     firstNameField.required = true;
+//
+//     const patronymicLabel = document.createElement("label");
+//     patronymicLabel.textContent = "Patronymic:";
+//     const patronymicField = document.createElement("input");
+//     patronymicField.type = "text";
+//
+//     const phoneLabel = document.createElement("label");
+//     phoneLabel.textContent = "Phone:";
+//     const phoneField = document.createElement("input");
+//     phoneField.type = "text";
+//     phoneField.required = true;
+//
+//     const emailLabel = document.createElement("label");
+//     emailLabel.textContent = "Email:";
+//     const emailField = document.createElement("input");
+//     emailField.type = "email";
+//     emailField.required = true;
+//
+//     const shippingAddressLabel = document.createElement("label");
+//     shippingAddressLabel.textContent = "Shipping Address:";
+//     const shippingAddressField = document.createElement("input");
+//     shippingAddressField.type = "text";
+//     shippingAddressField.required = true;
+//
+//     // Создаем кнопку "OK" для добавления нового клиента
+//     const okButton = document.createElement("button");
+//     okButton.textContent = "OK";
+//     okButton.addEventListener("click", function() {
+//         const lastName = lastNameField.value.trim();
+//         const firstName = firstNameField.value.trim();
+//         const patronymic = patronymicField.value.trim();
+//         const phone = phoneField.value.trim();
+//         const email = emailField.value.trim();
+//         const shippingAddress = shippingAddressField.value.trim();
+//
+//         // Проверяем, что все обязательные поля заполнены
+//         if (lastName && firstName && phone && email && shippingAddress) {
+//             const data = { lastName, firstName, patronymic, phone, email, shippingAdress: shippingAddress };
+//             const token = getCookie("token");
+//             fetch("https://retail-n3ew.onrender.com/customer", {
+//                 method: "POST",
+//                 headers: {
+//                     "Content-Type": "application/json",
+//                     "Authorization": `Bearer ${token}`
+//                 },
+//                 body: JSON.stringify(data)
+//             })
+//                 .then(response => {
+//                     if (!response.ok) {
+//                         if (response.status === 403) {
+//                             // Если получена ошибка 403, отображаем сообщение об ошибке
+//                             showModal("You have no rights to this action");
+//                         } else {
+//                             throw new Error("Failed to add new customer");
+//                         }
+//                     } else {
+//                         // Успешно добавлено
+//                         closeModal();
+//                         fetchCustomersDataFromAPI(); // Обновляем таблицу клиентов
+//                     }
+//                 })
+//                 .catch(error => {
+//                     console.error("Error adding new customer:", error);
+//                     closeModal();
+//                 });
+//         }
+//     });
+//
+//     // Создаем кнопку "Cancel" для закрытия модального окна
+//     const cancelButton = document.createElement("button");
+//     cancelButton.textContent = "Cancel";
+//     cancelButton.addEventListener("click", closeModal);
+//
+//     // Добавляем элементы в контент модального окна
+//     modalContent.appendChild(lastNameLabel);
+//     modalContent.appendChild(lastNameField);
+//     modalContent.appendChild(firstNameLabel);
+//     modalContent.appendChild(firstNameField);
+//     modalContent.appendChild(patronymicLabel);
+//     modalContent.appendChild(patronymicField);
+//     modalContent.appendChild(phoneLabel);
+//     modalContent.appendChild(phoneField);
+//     modalContent.appendChild(emailLabel);
+//     modalContent.appendChild(emailField);
+//     modalContent.appendChild(shippingAddressLabel);
+//     modalContent.appendChild(shippingAddressField);
+//     modalContent.appendChild(okButton);
+//     modalContent.appendChild(cancelButton);
+//
+//     // Добавляем контент модального окна в модальное окно
+//     modal.appendChild(modalContent);
+//
+//     // Добавляем модальное окно в тело документа
+//     document.body.appendChild(modal);
+// }
 
 function closeModal() {
     const modal = document.querySelector(".modal");
@@ -1208,6 +1235,35 @@ function displayProductsTable(products) {
 
     document.body.appendChild(addButton);
 }
+
+
+
+function showModal(message) {
+    const modal = document.createElement("div");
+    modal.className = "modal";
+    modal.innerHTML = `
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <p>${message}</p>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    const closeButton = modal.querySelector(".close");
+    closeButton.addEventListener("click", () => {
+        closeModal(modal); // передаем modal в функцию closeModal
+    });
+}
+
+// Функция для закрытия модального окна
+function closeModalAfterSubmit() {
+    const modal = document.querySelector(".modal");
+    if (modal) {
+        modal.remove();
+    }
+}
+
+
 
 function addNewProduct() {
     // Создаем модальное окно для ввода данных нового продукта
@@ -1260,11 +1316,16 @@ function addNewProduct() {
             })
                 .then(response => {
                     if (!response.ok) {
-                        throw new Error("Failed to add new product");
+                        if (response.status === 403) {
+                            // Если получена ошибка 403, отображаем сообщение об ошибке
+                            showModal("You have no rights to this action");
+                        } else {
+                            throw new Error("Failed to add new product");
+                        }
+                    } else {
+                        // Если запрос прошел успешно, не закрываем модальное окно
+                        fetchProductsDataFromAPI(); // Обновляем таблицу продуктов
                     }
-                    // Успешно добавлено
-                    closeModal();
-                    fetchProductsDataFromAPI(); // Обновляем таблицу продуктов
                 })
                 .catch(error => {
                     console.error("Error adding new product:", error);
