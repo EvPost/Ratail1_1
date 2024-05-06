@@ -435,6 +435,9 @@ function fetchProductsDataFromAPI() {
         .catch(error => console.error("Error fetching products data: ", error));
 }
 
+
+
+
 function displayOrdersTable(orders) {
     const tableContainer = document.createElement("div");
     tableContainer.classList.add("orders-table-container");
@@ -442,7 +445,7 @@ function displayOrdersTable(orders) {
     const table = document.createElement("table");
     table.classList.add("orders-table");
     const headerRow = table.insertRow();
-    const headers = ["Warehouse", "Products", "Quantity", "Total Price", "Ship Name", "Shipping Address"];
+    const headers = ["Warehouse", "Products", "Quantity", "Total Price", "Shipping Address", "Confirmed", "Actions"];
 
     headers.forEach(headerText => {
         const headerCell = document.createElement("th");
@@ -453,18 +456,26 @@ function displayOrdersTable(orders) {
     orders.forEach(order => {
         const row = table.insertRow();
         const warehouseName = order.warehouse ? order.warehouse.name : "N/A";
-        const products = order.product.map(product => product.name).join(", ");
-        const quantity = order.product.reduce((total, product) => total + product.OrderListing.amount, 0);
-        const totalPrice = order.product.reduce((total, product) => total + (product.price * product.OrderListing.amount), 0);
-        const shipName = order.customer ? order.customer.lastName + " " + order.customer.firstName : "N/A";
-        const shippingAddress = order.customer ? order.customer.shippingAdress : "N/A";
+        const products = order.orderListing.map(listing => listing.product.name).join(", ");
+        const quantity = order.orderListing.reduce((total, listing) => total + listing.amount, 0);
+        const totalPrice = order.orderListing.reduce((total, listing) => total + (listing.product.price * listing.amount), 0);
+        const shippingAddress = order.shippingAddress || "N/A";
+        const confirmed = order.confirmed ? "True" : "False";
 
-        const rowData = [warehouseName, products, quantity, totalPrice, shipName, shippingAddress];
+        const rowData = [warehouseName, products, quantity, totalPrice, shippingAddress, confirmed];
 
         rowData.forEach(value => {
             const cell = row.insertCell();
             cell.textContent = value;
         });
+
+        // Adding Confirm button
+        const confirmButtonCell = row.insertCell();
+        const confirmButton = document.createElement("button");
+        confirmButton.textContent = "Confirm";
+        confirmButton.classList.add("confirmBtn");
+        confirmButton.addEventListener("click", () => confirmOrder(order.id)); // Assuming there's a function confirmOrder to handle confirmation
+        confirmButtonCell.appendChild(confirmButton);
     });
 
     tableContainer.appendChild(table);
@@ -477,6 +488,210 @@ function displayOrdersTable(orders) {
 
     document.body.appendChild(addButton);
 }
+
+function confirmOrder(orderId) {
+    const token = getCookie("token");
+    // Отправка POST-запроса для подтверждения заказа
+    fetch(`https://retail-n3ew.onrender.com/order/confirm/${orderId}`, {
+        headers: {
+            "Authorization": `Bearer ${token}`
+        },
+        method: 'POST',
+        // Можно добавить заголовки или тело запроса, если необходимо
+    })
+    .then(response => {
+        if (!response.ok) {
+            if (response.status === 400 || response.status === 403) {
+                // Если получена ошибка 400 или 403, парсим тело ответа как JSON
+                response.json().then(errorData => {
+                    if (errorData.message) {
+                        // Если есть сообщение об ошибке, показываем его в модальном окне
+                        showModal(errorData.message);
+                    } else {
+                        // В противном случае показываем общее сообщение об ошибке
+                        showModal("An error occurred while confirming the order");
+                    }
+                }).catch(() => {
+                    // В случае ошибки парсинга JSON, показываем общее сообщение об ошибке
+                    showModal("An error occurred while confirming the order");
+                });
+            } else {
+                throw new Error('Failed to confirm order');
+            }
+        } else {
+            // Обработка успешного подтверждения заказа, если необходимо
+
+            // Обновление таблицы с задержкой
+            setTimeout(() => {
+                removePreviousTable();
+                fetchOrdersDataFromAPI();
+            }, 300); // Задержка в миллисекундах (например, 1000 миллисекунд = 1 секунда)
+        }
+    })
+    .catch(error => {
+        console.error('Error confirming order:', error);
+        // Обработка ошибки подтверждения заказа, если необходимо
+    });
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function addNewRow() {
+    const table = document.querySelector(".orders-table");
+    const newRow = table.insertRow();
+
+    // Создаем ячейку для селектора склада
+    const warehouseCell = newRow.insertCell();
+
+    // Создаем селектор склада
+    const warehouseSelect = document.createElement("select");
+    warehouseSelect.classList.add("warehouse-select");
+
+    // Делаем GET запрос на сервер для получения данных о складах
+    fetch('https://retail-n3ew.onrender.com/warehouse')
+        .then(response => response.json())
+        .then(data => {
+            // Заполняем селектор данными о складах
+            data.forEach(warehouse => {
+                const option = document.createElement("option");
+                option.value = warehouse.id;
+                option.textContent = warehouse.name;
+                warehouseSelect.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching warehouse data:', error);
+        });
+
+    // Добавляем селектор склада в ячейку
+    warehouseCell.appendChild(warehouseSelect);
+
+    // Создаем ячейку для селектора продукта
+    const productCell = newRow.insertCell();
+
+    // Создаем селектор продукта
+    const productSelect = document.createElement("select");
+    productSelect.classList.add("product-select");
+
+    // Делаем GET запрос на сервер для получения данных о продуктах
+    fetch('https://retail-n3ew.onrender.com/product')
+        .then(response => response.json())
+        .then(productData => {
+            // Заполняем селектор данными о продуктах
+            productData.forEach(product => {
+                const option = document.createElement("option");
+                option.value = product.id;
+                option.textContent = product.name;
+                productSelect.appendChild(option);
+            });
+
+            // Добавляем обработчик изменения значения в селекторе продукта
+            productSelect.addEventListener('change', () => {
+                // Получаем цену выбранного продукта
+                const selectedProductId = productSelect.value;
+                const selectedProduct = productData.find(product => product.id === selectedProductId);
+                const price = selectedProduct ? selectedProduct.price : 0;
+
+                // Получаем количество, введенное пользователем
+                const quantity = parseFloat(quantityInput.value) || 0;
+
+                // Вычисляем стоимость (количество * цена)
+                const cost = quantity * price;
+
+                // Устанавливаем значение в соответствующую ячейку
+                costCell.textContent = cost.toFixed(2);
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching product data:', error);
+        });
+
+    // Добавляем селектор продукта в ячейку
+    productCell.appendChild(productSelect);
+
+    // Создаем ячейку для ввода количества продукта
+    const quantityCell = newRow.insertCell();
+    const quantityInput = document.createElement("input");
+    quantityInput.type = "text";
+    quantityInput.classList.add("quantity-input");
+    quantityCell.appendChild(quantityInput);
+
+    // Создаем ячейку для вычисления стоимости
+    const costCell = newRow.insertCell();
+    quantityInput.addEventListener('change', () => {
+        // Получаем количество, введенное пользователем
+        const quantity = parseFloat(quantityInput.value) || 0;
+
+        // Получаем цену выбранного продукта
+        const selectedProductId = productSelect.value;
+        const selectedProduct = productData.find(product => product.id === selectedProductId);
+        const price = selectedProduct ? selectedProduct.price : 0;
+
+        // Вычисляем общую стоимость заказа (количество * цена)
+        const totalCost = quantity * price;
+
+        // Устанавливаем значение в соответствующую ячейку
+        costCell.textContent = totalCost.toFixed(2);
+    });
+
+    // Создаем ячейку для ввода адреса доставки
+    const addressCell = newRow.insertCell();
+    const addressInput = document.createElement("input");
+    addressInput.type = "text";
+    addressInput.placeholder = "Shipping Address";
+    addressInput.classList.add("address-input");
+    addressCell.appendChild(addressInput);
+
+    const addButton = document.querySelector(".addBtn");
+    addButton.remove();
+
+    const saveButton = document.createElement("button");
+    saveButton.textContent = "Save";
+    saveButton.addEventListener("click", saveData);
+
+    document.body.appendChild(saveButton);
+}
+
+
+
+
+
+async function saveData() {
+    try {
+        const warehouseSelect = document.querySelector('.warehouse-select');
+        const productSelect = document.querySelector('.product-select');
+        const quantityInput = document.querySelector('.quantity-input');
+        const shippingAddress = document.querySelector('.address-input');
+
+        const warehouseId = warehouseSelect.value;
+
+        const orderId = await saveOrder(warehouseId, shippingAddress.value);
+
+        const productId = productSelect.value;
+        const amount = parseFloat(quantityInput.value) || 0;
+        await saveOrderListing(orderId, productId, amount);
+
+        console.log("Order ID:", orderId);
+    } catch (error) {
+        console.error('Error saving data:', error);
+    }
+    removePreviousTable();
+    fetchOrdersDataFromAPI();
+}
+
+
+
 
 function displayWarehouseTable(warehouses) {
     const tableContainer = document.createElement("div");
@@ -772,190 +987,9 @@ function moveProduct(stockId, warehouse, productId) {
         });
 }
 
-function addNewRow() {
-    const table = document.querySelector(".orders-table");
-    const newRow = table.insertRow();
-
-    // Создаем ячейку для селектора склада
-    const warehouseCell = newRow.insertCell();
-
-    // Создаем селектор склада
-    const warehouseSelect = document.createElement("select");
-    warehouseSelect.classList.add("warehouse-select");
-
-    // Делаем GET запрос на сервер для получения данных о складах
-    fetch('https://retail-n3ew.onrender.com/warehouse')
-        .then(response => response.json())
-        .then(data => {
-            // Заполняем селектор данными о складах
-            data.forEach(warehouse => {
-                const option = document.createElement("option");
-                option.value = warehouse.id;
-                option.textContent = warehouse.name;
-                warehouseSelect.appendChild(option);
-            });
-        })
-        .catch(error => {
-            console.error('Error fetching warehouse data:', error);
-        });
-
-    // Добавляем селектор склада в ячейку
-    warehouseCell.appendChild(warehouseSelect);
-
-    // Создаем ячейку для селектора продукта
-    const productCell = newRow.insertCell();
-
-    // Создаем селектор продукта
-    const productSelect = document.createElement("select");
-    productSelect.classList.add("product-select");
-
-    // Делаем GET запрос на сервер для получения данных о продуктах
-    fetch('https://retail-n3ew.onrender.com/product')
-        .then(response => response.json())
-        .then(productData => { // Переименовываем переменную data на productData
-            // Заполняем селектор данными о продуктах
-            productData.forEach(product => {
-                const option = document.createElement("option");
-                option.value = product.id;
-                option.textContent = product.name;
-                productSelect.appendChild(option);
-            });
-
-            // Добавляем обработчик изменения значения в селекторе продукта
-            productSelect.addEventListener('change', () => {
-                // Получаем цену выбранного продукта
-                const selectedProductId = productSelect.value;
-                const selectedProduct = productData.find(product => product.id === selectedProductId);
-                const price = selectedProduct ? selectedProduct.price : 0;
-
-                // Получаем количество, введенное пользователем
-                const quantity = parseFloat(quantityInput.value) || 0;
-
-                // Вычисляем стоимость (количество * цена)
-                const cost = quantity * price;
-
-                // Устанавливаем значение в соответствующую ячейку
-                costCell.textContent = cost.toFixed(2);
-            });
-        })
-        .catch(error => {
-            console.error('Error fetching product data:', error);
-        });
-
-    // Добавляем селектор продукта в ячейку
-    productCell.appendChild(productSelect);
-
-    // Создаем ячейку для ввода количества продукта
-    const quantityCell = newRow.insertCell();
-    const quantityInput = document.createElement("input");
-    quantityInput.type = "text";
-    quantityInput.classList.add("quantity-input");
-    quantityCell.appendChild(quantityInput);
-
-    // Создаем ячейку для вычисления стоимости
-    const costCell = newRow.insertCell();
-    quantityInput.addEventListener('change', () => {
-        // Получаем количество, введенное пользователем
-        const quantity = parseFloat(quantityInput.value) || 0;
-
-        // Получаем цену выбранного продукта
-        const selectedProductId = productSelect.value;
-        const selectedProduct = productData.find(product => product.id === selectedProductId);
-        const price = selectedProduct ? selectedProduct.price : 0;
-
-        // Вычисляем общую стоимость заказа (количество * цена)
-        const totalCost = quantity * price;
-
-        // Устанавливаем значение в соответствующую ячейку
-        costCell.textContent = totalCost.toFixed(2);
-    });
-    const customerCell = newRow.insertCell();
-
-// Создаем селектор имени клиента
-    const customerSelect = document.createElement("select");
-    customerSelect.classList.add("customer-select");
-
-// Делаем GET запрос на сервер для получения данных о клиентах
-    fetch('https://retail-n3ew.onrender.com/customer')
-        .then(response => response.json())
-        .then(customerData => {
-            // Заполняем селектор данными о клиентах
-            customerData.forEach(customer => {
-                const option = document.createElement("option");
-                option.value = customer.id;
-                option.textContent = customer.firstName + ' ' + customer.lastName;
-                customerSelect.appendChild(option);
-            });
-        })
-        .catch(error => {
-            console.error('Error fetching customer data:', error);
-        });
-    // Добавляем обработчик изменения значения в селекторе имени клиента
-    customerSelect.addEventListener('change', () => {
-        // Получаем идентификатор выбранного клиента
-        const selectedCustomerId = customerSelect.value;
-
-        // Если клиент выбран
-        if (selectedCustomerId) {
-            // Делаем GET запрос на сервер для получения данных о клиенте по его идентификатору
-            fetch(`https://retail-n3ew.onrender.com/customer/${selectedCustomerId}`)
-                .then(response => response.json())
-                .then(customer => {
-                    // Если у клиента есть адрес, отображаем его в ячейке
-                    if (customer.shippingAdress) {
-                        addressCell.textContent = customer.shippingAdress;
-                    } else {
-                        addressCell.textContent = "Адрес не указан";
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching customer address:', error);
-                });
-        } else {
-            // Если клиент не выбран, очищаем ячейку с адресом
-            addressCell.textContent = "";
-        }
-    });
-
-// Создаем ячейку для отображения адреса клиента
-    const addressCell = newRow.insertCell();
 
 
-// Добавляем селектор имени клиента в ячейку
-    customerCell.appendChild(customerSelect);
-
-
-    const addButton = document.querySelector(".addBtn");
-    addButton.remove();
-
-    const saveButton = document.createElement("button");
-    saveButton.textContent = "Save";
-    saveButton.addEventListener("click", saveData);
-
-    document.body.appendChild(saveButton);
-}
-
-
-function saveData() {
-    const warehouseSelect = document.querySelector('.warehouse-select');
-    const productSelect = document.querySelector('.product-select');
-    const quantityInput = document.querySelector('.quantity-input');
-    const customerSelect = document.querySelector('.customer-select');
-
-    const warehouseName = warehouseSelect.options[warehouseSelect.selectedIndex].textContent;
-    const productName = productSelect.options[productSelect.selectedIndex].textContent;
-    const quantity = quantityInput.value;
-    const shipName = customerSelect.options[customerSelect.selectedIndex].textContent;
-
-    console.log("Warehouse:", warehouseName);
-    console.log("Products:", productName);
-    console.log("Quantity:", quantity);
-    console.log("Ship Name:", shipName);
-
-    removePreviousTable();
-    fetchOrdersDataFromAPI();
-}
-async function saveOrder(customerId, warehouseId) {
+async function saveOrder(warehouseId, shippingAddress) {
     try {
         const response = await fetch('https://retail-n3ew.onrender.com/order', {
             method: 'POST',
@@ -963,8 +997,8 @@ async function saveOrder(customerId, warehouseId) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                customerId: customerId,
-                warehouseId: warehouseId
+                warehouseId: warehouseId,
+                shippingAddress: shippingAddress
             })
         });
         const data = await response.json();
@@ -995,30 +1029,7 @@ async function saveOrderListing(orderId, productId, amount) {
     }
 }
 
-async function saveData() {
-    try {
-        const warehouseSelect = document.querySelector('.warehouse-select');
-        const productSelect = document.querySelector('.product-select');
-        const quantityInput = document.querySelector('.quantity-input');
-        const customerSelect = document.querySelector('.customer-select');
 
-        const warehouseId = warehouseSelect.value;
-        const customerId = customerSelect.value;
-
-        const orderId = await saveOrder(customerId, warehouseId);
-
-        const productId = productSelect.value;
-        const amount = parseFloat(quantityInput.value) || 0;
-
-        await saveOrderListing(orderId, productId, amount);
-
-        console.log("Order ID:", orderId);
-    } catch (error) {
-        console.error('Error saving data:', error);
-    }
-    removePreviousTable();
-    fetchOrdersDataFromAPI();
-}
 
 
 
@@ -1362,4 +1373,3 @@ function closeModal() {
         modal.remove();
     }
 }
-
