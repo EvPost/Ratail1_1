@@ -482,7 +482,7 @@ function displayOrdersTable(orders) {
     document.body.appendChild(tableContainer);
 
     const addButton = document.createElement("button");
-    addButton.textContent = "Add";
+    addButton.textContent = "Add new order";
     addButton.classList.add("addBtn");
     addButton.addEventListener("click", addNewRow);
 
@@ -1240,7 +1240,7 @@ function displayProductsTable(products) {
 
     // Создание кнопки для добавления нового продукта
     const addButton = document.createElement("button");
-    addButton.textContent = "+";
+    addButton.textContent = "Add new product";
     addButton.classList.add("addBtn");
     addButton.addEventListener("click", addNewProduct);
 
