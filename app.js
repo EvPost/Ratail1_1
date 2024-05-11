@@ -1412,10 +1412,52 @@ function addNewProduct() {
                         } else {
                             throw new Error("Failed to add new product");
                         }
-                    } else {
-                        // Если запрос прошел успешно, не закрываем модальное окно
-                        fetchProductsDataFromAPI(); // Обновляем таблицу продуктов
                     }
+                    return response.json(); // Парсимо JSON-відповідь
+                })
+                .then(data => {
+                    // Отримуємо ідентифікатор нового продукту
+                    const productId = data.id;
+
+                    // Виводимо ідентифікатор продукту у консоль
+                    console.log("Product ID:", productId);
+
+                    // Обновлюємо таблицю продуктів
+                    fetchProductsDataFromAPI();
+
+                    // Створюємо дані для відправлення на склади
+                    const warehouseIds = ["d316cb37-71b7-4fa4-8f4e-909a1f48ebb6", "a304d9b0-0a20-4afd-b09f-07a2d488b781", "8bf604ed-f1e3-45d9-82cc-ae3f6c4fb0b3", "ed84cb80-63c2-4da9-afde-4dc112c78664", "dc54ce8b-b605-4ec1-8fbf-36d0f9f984c5", "61b506da-657f-4f55-b7b4-ecd897a61635"];
+
+                    // Створюємо масив обіцянок POST-запитів на створення записів про наявність продукту на кожному складі
+                    const postDataPromises = warehouseIds.map(warehouseId => {
+                        const postData = {
+                            productId,
+                            warehouseId,
+                            amount: 0
+                        };
+
+                        return fetch("https://retail-n3ew.onrender.com/stock", {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Authorization": `Bearer ${token}`
+                            },
+                            body: JSON.stringify(postData)
+                        });
+                    });
+
+                    // Виконуємо всі POST-запити асинхронно
+                    Promise.all(postDataPromises)
+                        .then(responses => {
+                            responses.forEach(response => {
+                                if (!response.ok) {
+                                    throw new Error("Failed to update stock information");
+                                }
+                            });
+                        })
+                        .catch(error => {
+                            console.error("Error updating stock information:", error);
+                        });
                 })
                 .catch(error => {
                     console.error("Error adding new product:", error);
@@ -1446,9 +1488,3 @@ function addNewProduct() {
     document.body.appendChild(modal);
 }
 
-function closeModal() {
-    const modal = document.querySelector(".modal");
-    if (modal) {
-        modal.remove();
-    }
-}
