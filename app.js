@@ -445,7 +445,7 @@ function displayOrdersTable(orders) {
     const table = document.createElement("table");
     table.classList.add("orders-table");
     const headerRow = table.insertRow();
-    const headers = ["Warehouse", "Products", "Quantity", "Total Price", "Shipping Address", "Confirmed", "Actions"];
+    const headers = ["Warehouse", "Products", "Quantity", "Total Price", "Shipping Address", "Confirmed", "Actions", "Delete"]; // Додали заголовок "Delete"
 
     headers.forEach(headerText => {
         const headerCell = document.createElement("th");
@@ -476,6 +476,14 @@ function displayOrdersTable(orders) {
         confirmButton.classList.add("confirmBtn");
         confirmButton.addEventListener("click", () => confirmOrder(order.id)); // Assuming there's a function confirmOrder to handle confirmation
         confirmButtonCell.appendChild(confirmButton);
+
+        // Adding Delete button
+        const deleteButtonCell = row.insertCell();
+        const deleteButton = document.createElement("button");
+        deleteButton.textContent = "Delete";
+        deleteButton.classList.add("deleteBtn");
+        deleteButton.addEventListener("click", () => deleteOrder(order.id)); // Assuming there's a function deleteOrder to handle deletion
+        deleteButtonCell.appendChild(deleteButton);
     });
 
     tableContainer.appendChild(table);
@@ -488,6 +496,38 @@ function displayOrdersTable(orders) {
 
     document.body.appendChild(addButton);
 }
+
+// Функція для видалення замовлення
+function deleteOrder(orderId) {
+    // Виводимо вікно з підтвердженням
+    const isConfirmed = confirm("Are you sure you want to delete this order?");
+    if (!isConfirmed) {
+        return; // Вихід, якщо користувач відмінив видалення
+    }
+
+    // Відправляємо DELETE-запит на вказаний URL з ідентифікатором замовлення
+    fetch(`https://retail-n3ew.onrender.com/order/${orderId}`, {
+        method: 'DELETE'
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Після успішного видалення оновлюємо таблицю через певний час
+            setTimeout(() => {
+                removePreviousTable();
+                fetchOrdersDataFromAPI();
+            }, 300);
+        })
+        .catch(error => {
+            console.error('There has been a problem with your fetch operation:', error);
+        });
+}
+
+
 
 function confirmOrder(orderId) {
     const token = getCookie("token");
@@ -700,7 +740,7 @@ function displayWarehouseTable(warehouses) {
     const table = document.createElement("table");
     table.classList.add("orders-table");
     const headerRow = table.insertRow();
-    const headers = ["Name", "Address"];
+    const headers = ["Name", "Address", "Report"]; // Додали заголовок "Report"
 
     headers.forEach(headerText => {
         const headerCell = document.createElement("th");
@@ -720,15 +760,54 @@ function displayWarehouseTable(warehouses) {
         const addressCell = row.insertCell();
         addressCell.textContent = address;
 
+        // Додаємо кнопку "Report"
+        const reportCell = row.insertCell();
+        const reportButton = document.createElement("button");
+        reportButton.textContent = "Report";
+        reportCell.appendChild(reportButton);
+
         // Добавляем обработчик событий для нажатия на название склада
         nameCell.addEventListener("click", function() {
             fetchProductsDataFromAPI1(warehouse.id);
+        });
+
+        // Додаємо обробник подій для натискання на кнопку "Report"
+        reportButton.addEventListener("click", function() {
+            // Відправляємо GET-запит на вказаний URL з ідентифікатором складу
+            fetch(`https://retail-n3ew.onrender.com/report/${warehouse.id}`, {
+                method: 'GET'
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json(); // Перетворюємо отриману відповідь в JSON
+                })
+                .then(data => {
+                    // Створюємо об'єкт Blob з JSON-даними
+                    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+                    // Створюємо посилання для завантаження файлу
+                    const url = URL.createObjectURL(blob);
+                    // Створюємо посилання на завантаження файлу та натисканням на кнопку викликаємо його завантаження
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'report.json'; // Назва файлу
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url); // Звільнюємо ресурси
+                })
+                .catch(error => {
+                    console.error('There has been a problem with your fetch operation:', error);
+                });
         });
     });
 
     tableContainer.appendChild(table);
     document.body.appendChild(tableContainer);
 }
+
+
+
 
 
 function displayProductsTable1(warehouse) {
